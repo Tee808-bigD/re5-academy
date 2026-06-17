@@ -272,5 +272,6 @@ Contact
 Maintainer: Tee808-bigD
 
 Project Link: https://github.com/Tee808-bigD/re5-academy
-
+Deploymed link: https://re5-academy.onrender.com/
+              : https://re5academy.netlify.app/
 
