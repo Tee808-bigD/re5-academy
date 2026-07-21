@@ -67,9 +67,7 @@ export async function handleLogin(c: Context) {
         .where(eq(users.id, user.id));
     } else {
       // Create new user
-      const [result] = await db
-        .insert(users)
-        .values({ email, name, lastSignInAt: new Date() });
+      await db.insert(users).values({ email, name, lastSignInAt: new Date() });
       user = (
         await db
           .select()
