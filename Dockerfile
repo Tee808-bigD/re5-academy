@@ -10,22 +10,6 @@ RUN npm ci && npm cache clean --force
 # Copy source code (including db, server, and config files)
 COPY . .
 
-# Build-time arguments for Vite (frontend needs these at build time)
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_APP_ID
-ARG VITE_KIMI_AUTH_URL
-ARG KIMI_OPEN_URL
-ARG OWNER_UNION_ID
-
-# Make them available as environment variables during the build
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-ENV VITE_APP_ID=$VITE_APP_ID
-ENV VITE_KIMI_AUTH_URL=$VITE_KIMI_AUTH_URL
-ENV KIMI_OPEN_URL=$KIMI_OPEN_URL
-ENV OWNER_UNION_ID=$OWNER_UNION_ID
-
 # Build the application (Vite frontend + server)
 RUN npm run build
 
@@ -49,11 +33,6 @@ COPY --from=builder /app/public ./public
 # Runtime environment variables (Render injects these at runtime)
 ENV NODE_ENV=production
 ENV PORT=3000
-
-# Note: VITE_* vars are NOT needed at runtime for the server
-# But if your server code reads SUPABASE_URL directly, add:
-# ENV SUPABASE_URL=${VITE_SUPABASE_URL}
-# ENV SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
 
 EXPOSE 3000
 

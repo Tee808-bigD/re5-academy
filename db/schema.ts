@@ -11,12 +11,11 @@ import {
   json,
 } from "drizzle-orm/mysql-core";
 
-// ─── USERS (existing — OAuth authenticated) ──────────────────────────
+// ─── USERS ────────────────────────────────────────────────────────────
 export const users = mysqlTable("users", {
   id: serial("id").primaryKey(),
-  unionId: varchar("unionId", { length: 255 }).notNull().unique(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
   name: varchar("name", { length: 255 }),
-  email: varchar("email", { length: 320 }),
   avatar: text("avatar"),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

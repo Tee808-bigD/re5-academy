@@ -1,9 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Chapter } from "../data/chapters";
 import { trpc } from "@/providers/trpc";
 import { useAuth } from "@/hooks/useAuth";
 import VideoPlayer from "./VideoPlayer";
 import Quiz from "./Quiz";
+import {
+  getLocalProgressForChapter,
+  saveLocalProgress,
+  saveLocalQuizResult,
+  recordLocalStudy,
+  syncLocalProgressToServer,
+  markSynced,
+} from "../data/storage";
 
 interface StudyRoomProps {
   chapter: Chapter;
@@ -37,8 +45,16 @@ export default function StudyRoom({ chapter, onBack }: StudyRoomProps) {
     },
   });
 
-  // Sync local state with server progress on load
+  // Sync local progress to server when user is authenticated
   useEffect(() => {
+    if (isAuthenticated) {
+      syncLocalProgressToServer({ saveProgress, recordStudy, saveQuiz });
+    }
+  }, [isAuthenticated, saveProgress, recordStudy, saveQuiz]);
+
+  // Sync local state with progress sources on load
+  useEffect(() => {
+    // Try server progress first, fall back to local storage
     if (serverProgress) {
       const chapterData = serverProgress.find((p) => p.chapterId === chapter.id);
       if (chapterData?.topicsCompleted) {
@@ -46,36 +62,63 @@ export default function StudyRoom({ chapter, onBack }: StudyRoomProps) {
           ? chapterData.topicsCompleted
           : [];
         setCompletedTopics(new Set(topics));
+        markSynced();
+      }
+    } else if (!isAuthenticated) {
+      // Load from localStorage for unauthenticated users
+      const localData = getLocalProgressForChapter(chapter.id);
+      if (localData?.topicsCompleted?.length) {
+        setCompletedTopics(new Set(localData.topicsCompleted));
       }
     }
-  }, [serverProgress, chapter.id]);
+  }, [serverProgress, chapter.id, isAuthenticated]);
 
-  const handleTopicComplete = (topicId: string) => {
+  const handleTopicComplete = useCallback((topicId: string) => {
     setCompletedTopics((prev) => {
       const next = new Set(prev);
       next.add(topicId);
-      return next;
-    });
 
-    // Calculate percentage
-    const allTopics = new Set([...Array.from(completedTopics), topicId]);
-    const pct = Math.round((allTopics.size / chapter.topics.length) * 100);
+      // Calculate percentage
+      const allTopics = Array.from(next);
+      const pct = Math.round((allTopics.length / chapter.topics.length) * 100);
 
-    // Persist to server if authenticated
-    if (isAuthenticated) {
-      saveProgress.mutate({
+      // Always save to localStorage
+      saveLocalProgress({
         chapterId: chapter.id,
         percentComplete: pct,
-        topicsCompleted: Array.from(allTopics),
+        topicsCompleted: allTopics,
       });
-      recordStudy.mutate({ minutes: 5 });
-    }
-  };
 
-  const handleQuizComplete = (score: number) => {
+      // Persist to server if authenticated
+      if (isAuthenticated) {
+        saveProgress.mutate({
+          chapterId: chapter.id,
+          percentComplete: pct,
+          topicsCompleted: allTopics,
+        });
+        recordStudy.mutate({ minutes: 5 });
+      } else {
+        // Track study locally
+        recordLocalStudy(5);
+      }
+
+      return next;
+    });
+  }, [chapter, isAuthenticated, saveProgress, recordStudy]);
+
+  const handleQuizComplete = useCallback((score: number) => {
     const correct = Math.round((score / 100) * chapter.questions.length);
 
-    // Save quiz result
+    // Always save quiz result locally
+    saveLocalQuizResult({
+      chapterId: chapter.id,
+      score,
+      totalQuestions: chapter.questions.length,
+      correctAnswers: correct,
+      answers: {},
+    });
+
+    // Sync to server if authenticated
     if (isAuthenticated) {
       saveQuiz.mutate({
         chapterId: chapter.id,
@@ -105,8 +148,21 @@ export default function StudyRoom({ chapter, onBack }: StudyRoomProps) {
         });
       }
       recordStudy.mutate({ minutes: 10 });
+    } else {
+      // Track quiz score and study time locally
+      saveLocalProgress({
+        chapterId: chapter.id,
+        percentComplete: score >= 70 ? 100 : Math.max(
+          Math.round((completedTopics.size / chapter.topics.length) * 100),
+          50,
+        ),
+        topicsCompleted: Array.from(completedTopics),
+        quizScore: score,
+        quizPassed: score >= 70,
+      });
+      recordLocalStudy(10);
     }
-  };
+  }, [chapter, isAuthenticated, completedTopics, saveProgress, recordStudy, saveQuiz]);
 
   return (
     <div className="min-h-screen" style={{ background: "#0A0A0F" }}>

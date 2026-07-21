@@ -7,6 +7,8 @@ import type { Chapter } from "./data/chapters";
 import ChapterCard from "./components/ChapterCard";
 import StudyRoom from "./components/StudyRoom";
 import Coaching from "./pages/Coaching";
+import Login from "./pages/Login";
+import { getLocalProgress } from "./data/storage";
 
 // ─── INTRO SCREEN ──────────────────────────────────────────────────
 function IntroScreen({ onStart }: { onStart: () => void }) {
@@ -96,10 +98,16 @@ function Dashboard({ onOpenChapter }: { onOpenChapter: (ch: Chapter) => void }) 
     enabled: isAuthenticated,
   });
 
-  // Merge server progress with local state
+  // Merge server progress with local fallback
   const chapterProgress: Record<number, number> = {};
   if (serverProgress) {
     for (const row of serverProgress) {
+      chapterProgress[row.chapterId] = row.percentComplete;
+    }
+  } else if (!isAuthenticated) {
+    // Use localStorage progress for unauthenticated users
+    const localProgress = getLocalProgress();
+    for (const row of localProgress) {
       chapterProgress[row.chapterId] = row.percentComplete;
     }
   }
@@ -289,7 +297,7 @@ export default function RE5Academy() {
 
   return (
     <Routes>
-      <Route path="/login" element={<div />} /> {/* Auth router handles login page */}
+      <Route path="/login" element={<Login />} />
       <Route path="/coaching" element={<Coaching />} />
       <Route path="/study" element={<StudyRoute />} />
       <Route

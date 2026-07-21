@@ -7,8 +7,8 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./router";
 import { createContext } from "./context";
 import { env } from "./lib/env";
-import { createOAuthCallbackHandler } from "./kimi/auth";
-import { Paths } from "@contracts/constants";
+import { handleLogin } from "./auth";
+import { checkAuthRateLimit } from "./lib/rate-limit";
 
 const app = new Hono<{ Bindings: HttpBindings }>();
 
@@ -55,8 +55,15 @@ app.use(
 // Body size limit (50MB)
 app.use(bodyLimit({ maxSize: 50 * 1024 * 1024 }));
 
-// OAuth callback
-app.get(Paths.oauthCallback, createOAuthCallbackHandler());
+// Login endpoint — issues JWT session cookie (rate-limited)
+app.post("/api/auth/login", async (c) => {
+  const ip = c.req.headers.get("x-forwarded-for") || "unknown";
+  const rate = checkAuthRateLimit(`login:${ip}`);
+  if (!rate.allowed) {
+    return c.json({ error: "Too many login attempts. Please wait before trying again." }, 429);
+  }
+  return handleLogin(c);
+});
 
 // Security: Remove server header identification
 app.use(async (c, next) => {
